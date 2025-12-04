@@ -1,0 +1,510 @@
+<!DOCTYPE html>
+<html lang="id">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Form Mirip Google Forms Pro</title>
+
+<style>
+    body {
+        font-family: "Roboto", Arial, sans-serif;
+        background: #f0f4ff;
+        margin: 0;
+        padding: 20px;
+    }
+    .container {
+        background: white;
+        max-width: 700px;
+        margin: auto;
+        padding: 25px;
+        border-radius: 12px;
+        box-shadow: 0 4px 10px rgba(0,0,0,0.1);
+        margin-bottom: 20px;
+    }
+    h2 { color: #3c4dff; }
+    input, textarea, button, select {
+        width: 100%;
+        padding: 10px;
+        border-radius: 8px;
+        border: 1px solid #bbb;
+        margin-top: 8px;
+    }
+    button {
+        background: #3c4dff;
+        color: white;
+        font-weight: bold;
+        border: none;
+        cursor: pointer;
+        margin-top: 10px;
+    }
+    button:hover { background: #1f30cc; }
+    .hidden { display: none; }
+    .question-box {
+        padding: 12px;
+        border-left: 5px solid #3c4dff;
+        background: #f9f9ff;
+        margin-bottom: 15px;
+        border-radius: 8px;
+        position: relative;
+    }
+    .img-preview {
+        max-width: 150px;
+        margin-top: 10px;
+        border-radius: 6px;
+    }
+    .menu-btn { width: auto; display: inline-block; margin-right: 5px; }
+    .delete-btn {
+        background: #d9534f;
+        width: auto;
+        padding: 5px 10px;
+        margin-top: 0;
+        position: absolute;
+        top: 10px;
+        right: 10px;
+        border-radius: 5px;
+    }
+    .clear-all-btn { 
+        background: #d9534f;
+        margin-top: 15px;
+    }
+    .correct { color: green; font-weight: bold; }
+    .incorrect { color: red; font-weight: bold; }
+    .answer-detail-box {
+        border: 1px solid #ddd;
+        padding: 10px;
+        margin-top: 10px;
+        border-radius: 5px;
+        font-size: 0.9em;
+    }
+</style>
+</head>
+<body onload="checkLoginStatus()">
+
+<div id="loginBox" class="container">
+    <h2>Login</h2>
+    <select id="role">
+        <option value="siswa">Siswa</option>
+        <option value="guru">Guru</option>
+    </select>
+    <input type="password" id="password" placeholder="Masukkan Password">
+    <button onclick="login()">Masuk</button>
+</div>
+
+<div id="menu" class="container hidden">
+    </div>
+
+<div id="guruPanel" class="container hidden">
+    <h2>Mode Guru – Buat Soal</h2>
+
+    <textarea id="qText" placeholder="Tulis soal..."></textarea>
+
+    <input type="file" id="qImage" accept="image/*" onchange="previewImage(event)">
+    <img id="preview" class="img-preview hidden">
+
+    <h3>Pilihan Jawaban:</h3>
+    <input id="optA" placeholder="A">
+    <input id="optB" placeholder="B">
+    <input id="optC" placeholder="C">
+    <input id="optD" placeholder="D">
+
+    <select id="answerKey">
+        <option value="" disabled selected>Kunci Jawaban</option>
+        <option value="A">A</option>
+        <option value="B">B</option>
+        <option value="C">C</option>
+        <option value="D">D</option>
+    </select>
+
+    <button onclick="saveQuestion()">Simpan Soal</button>
+
+    <h3>Backup / Restore Soal (JSON)</h3>
+    <button onclick="exportSoalJson()">Export Soal ke JSON (Backup)</button>
+    <input type="file" id="importFile" accept=".json" onchange="importSoalJson(event)">
+
+    <h3>Daftar Soal</h3>
+    <div id="questionList"></div>
+
+    <h3>Jawaban & Nilai Siswa</h3>
+    <div id="answerList"></div>
+    <button onclick="clearAnswers()" class="clear-all-btn">Hapus Semua Jawaban & Nilai Siswa</button>
+</div>
+
+<div id="siswaPanel" class="container hidden">
+    <h2>Mode Siswa – Kerjakan Soal</h2>
+    
+    <div id="studentInfoBox">
+        <input type="text" id="studentNameInput" placeholder="Masukkan Nama Anda">
+        <button onclick="startQuiz()">Mulai Kuis</button>
+    </div>
+
+    <div id="quizContent" class="hidden">
+        <div id="quizBox"></div>
+        <button id="submitBtn" onclick="submitQuiz()">Kirim Jawaban</button>
+    </div>
+</div>
+
+<script>
+let currentStudentName = '';
+
+// =====================================================
+// GLOBAL FUNCTIONS & INIT
+// =====================================================
+function hideAllPanels() {
+    document.getElementById("loginBox").classList.add("hidden");
+    document.getElementById("menu").classList.add("hidden");
+    document.getElementById("guruPanel").classList.add("hidden");
+    document.getElementById("siswaPanel").classList.add("hidden");
+}
+
+function checkLoginStatus() {
+    const role = localStorage.getItem("role");
+    hideAllPanels();
+    
+    const menu = document.getElementById("menu");
+    const menuBtns = [];
+    
+    if (role === 'guru') {
+        menuBtns.push('<button onclick="showGuru()" class="menu-btn">Mode Guru</button>');
+        menuBtns.push('<button onclick="showSiswa()" class="menu-btn">Mode Siswa</button>');
+    } else if (role === 'siswa') {
+        menuBtns.push('<button onclick="showSiswa()" class="menu-btn">Mode Siswa</button>');
+    }
+
+    if (role) {
+        menu.classList.remove("hidden");
+        menuBtns.push('<button onclick="logout()" class="menu-btn" style="background:#d9534f;">Logout</button>');
+        menu.innerHTML = menuBtns.join(''); 
+        
+        if (role === "guru") showGuru();
+        else showSiswa();
+    } else {
+        menu.classList.add("hidden");
+        document.getElementById("loginBox").classList.remove("hidden");
+    }
+}
+
+function showGuru() {
+    if (localStorage.getItem("role") !== "guru") return alert("Hanya guru yang boleh!");
+    hideAllPanels();
+    document.getElementById("menu").classList.remove("hidden");
+    document.getElementById("guruPanel").classList.remove("hidden");
+    loadQuestions();
+}
+
+function showSiswa() {
+    hideAllPanels();
+    document.getElementById("menu").classList.remove("hidden");
+    document.getElementById("siswaPanel").classList.remove("hidden");
+    
+    document.getElementById("studentInfoBox").classList.remove("hidden");
+    document.getElementById("quizContent").classList.add("hidden");
+    document.getElementById("studentNameInput").value = ''; 
+    currentStudentName = ''; 
+}
+
+// =====================================================
+// LOGIN
+// =====================================================
+function login() {
+    const role = document.getElementById("role").value;
+    const pass = document.getElementById("password").value;
+
+    if (role === "guru" && pass !== "12345") {
+        alert("Password salah!");
+        return;
+    }
+
+    localStorage.setItem("role", role);
+    checkLoginStatus();
+}
+
+function logout() {
+    localStorage.removeItem("role");
+    location.reload();
+}
+
+// =====================================================
+// MODE SISWA: START QUIZ
+// =====================================================
+function startQuiz() {
+    const name = document.getElementById("studentNameInput").value.trim();
+    if (!name) {
+        alert("Nama harus diisi!");
+        return;
+    }
+    
+    currentStudentName = name;
+    document.getElementById("studentInfoBox").classList.add("hidden");
+    document.getElementById("quizContent").classList.remove("hidden");
+    loadQuizForStudents(); 
+}
+
+// =====================================================
+// IMAGE PREVIEW & GURU FUNCTIONS
+// =====================================================
+function previewImage(e) {
+    const img = document.getElementById("preview");
+    const file = e.target.files[0];
+    if (!file) {
+        img.src = "";
+        img.classList.add("hidden");
+        return;
+    }
+    const reader = new FileReader();
+    reader.onload = () => {
+        img.src = reader.result;
+        img.classList.remove("hidden");
+    };
+    reader.readAsDataURL(file);
+}
+
+function saveQuestion() {
+    const qText = document.getElementById("qText").value.trim();
+    const optA = document.getElementById("optA").value.trim();
+    const optB = document.getElementById("optB").value.trim();
+    const optC = document.getElementById("optC").value.trim();
+    const optD = document.getElementById("optD").value.trim();
+    const key = document.getElementById("answerKey").value;
+    const imgElement = document.getElementById("preview");
+    
+    document.getElementById("qImage").value = null; 
+
+    if (!qText || !optA || !optB || !optC || !optD || !key) {
+        alert("Semua kolom Soal dan Pilihan Jawaban harus diisi, dan Kunci Jawaban harus dipilih!");
+        return;
+    }
+
+    const imgSource = imgElement.src;
+    let image_data = null;
+    if (imgSource && imgSource.startsWith("data:image")) {
+         image_data = imgSource;
+    }
+    
+    let questions = JSON.parse(localStorage.getItem("questions") || "[]");
+    questions.push({
+        text: qText,
+        img: image_data,
+        options: { A: optA, B: optB, C: optC, D: optD },
+        key: key
+    });
+
+    localStorage.setItem("questions", JSON.stringify(questions));
+    loadQuestions();
+
+    document.getElementById("qText").value = "";
+    document.getElementById("optA").value = "";
+    document.getElementById("optB").value = "";
+    document.getElementById("optC").value = "";
+    document.getElementById("optD").value = "";
+    document.getElementById("answerKey").value = "";
+    imgElement.src = "";
+    imgElement.classList.add("hidden");
+    alert("Soal berhasil disimpan!");
+}
+
+function deleteQuestion(index) {
+    if (!confirm("Yakin ingin menghapus soal ini?")) return;
+
+    let questions = JSON.parse(localStorage.getItem("questions") || "[]");
+    
+    if (index >= 0 && index < questions.length) {
+        questions.splice(index, 1);
+        localStorage.setItem("questions", JSON.stringify(questions));
+        loadQuestions();
+    }
+}
+
+function loadQuestions() {
+    const list = document.getElementById("questionList");
+    let q = JSON.parse(localStorage.getItem("questions") || "[]");
+
+    list.innerHTML = q.map((s,i)=>`
+        <div class="question-box">
+            <button class="delete-btn" onclick="deleteQuestion(${i})">Hapus</button>
+            <b>${i+1}. ${s.text}</b><br>
+            ${s.img ? `<img src="${s.img}" style="max-width:120px; margin-top:10px;">` : ""}
+            <br>A. ${s.options.A}
+            <br>B. ${s.options.B}
+            <br>C. ${s.options.C}
+            <br>D. ${s.options.D}
+            <br><b>Kunci: ${s.key}</b>
+        </div>
+    `).join("");
+
+    loadAnswers();
+}
+
+// =====================================================
+// FUNGSI EXPORT/IMPORT JSON (Backup/Restore data lengkap)
+// =====================================================
+
+// Export Soal ke JSON
+function exportSoalJson() {
+    let q = JSON.parse(localStorage.getItem("questions") || "[]");
+    // Menggunakan pemformatan 2 spasi agar file JSON rapi
+    const jsonString = JSON.stringify(q, null, 2); 
+
+    let blob = new Blob([jsonString], { type: "application/json" });
+    let a = document.createElement("a");
+    a.href = URL.createObjectURL(blob);
+    a.download = "soal_backup.json";
+    document.body.appendChild(a);
+    a.click();
+    document.body.removeChild(a);
+    alert("Soal berhasil di-export ke soal_backup.json!");
+}
+
+// Import Soal dari JSON
+function importSoalJson(e) {
+    const file = e.target.files[0];
+    if (!file) return;
+
+    if (!file.name.endsWith(".json")) {
+        alert("Hanya file JSON yang didukung untuk impor backup.");
+        document.getElementById("importFile").value = null; 
+        return;
+    }
+
+    const reader = new FileReader();
+    reader.onload = () => {
+        try {
+            const importedData = JSON.parse(reader.result);
+            if (!Array.isArray(importedData)) {
+                 throw new Error("Format file JSON tidak valid. Harus berupa array soal.");
+            }
+            
+            // Overwrite data di localStorage
+            localStorage.setItem("questions", JSON.stringify(importedData));
+            loadQuestions();
+            alert(`${importedData.length} soal berhasil di-restore dari JSON!`);
+        } catch (error) {
+             alert("Gagal memproses file JSON. Error: " + error.message);
+        }
+    };
+    reader.readAsText(file);
+    document.getElementById("importFile").value = null; 
+}
+
+// =====================================================
+// MODE SISWA: SHOW QUIZ
+// =====================================================
+function loadQuizForStudents() {
+    const box = document.getElementById("quizBox");
+    const btn = document.getElementById("submitBtn");
+    let q = JSON.parse(localStorage.getItem("questions") || "[]");
+
+    if (q.length === 0) {
+        box.innerHTML = "<p>Belum ada soal tersedia.</p>";
+        btn.classList.add("hidden");
+        return;
+    }
+    btn.classList.remove("hidden");
+
+    box.innerHTML = q.map((s,i)=>`
+        <div class="question-box">
+            <b>${i+1}. ${s.text}</b><br>
+            ${s.img ? `<img src="${s.img}" style="max-width:150px;">` : ""}
+            <br><label><input type="radio" name="q${i}" value="A"> A. ${s.options.A}</label><br>
+            <label><input type="radio" name="q${i}" value="B"> B. ${s.options.B}</label><br>
+            <label><input type="radio" name="q${i}" value="C"> C. ${s.options.C}</label><br>
+            <label><input type="radio" name="q${i}" value="D"> D. ${s.options.D}</label>
+        </div>
+    `).join("");
+}
+
+// =====================================================
+// SUBMIT QUIZ + AUTO SCORE
+// =====================================================
+function submitQuiz() {
+    let q = JSON.parse(localStorage.getItem("questions") || "[]");
+    let answers = [];
+    let score = 0;
+    let unanswered = 0;
+
+    if (!currentStudentName) {
+        alert("Harap masukkan nama Anda terlebih dahulu di halaman sebelumnya!");
+        return;
+    }
+
+    q.forEach((item, i) => {
+        const selected = document.querySelector(`input[name="q${i}"]:checked`);
+        const ans = selected ? selected.value : "-";
+        
+        if (ans === "-") unanswered++;
+        
+        if (ans === item.key) score++;
+        answers.push(ans);
+    });
+
+    if (unanswered > 0) {
+        if (!confirm(`Anda belum menjawab ${unanswered} dari ${q.length} soal. Tetap kirim?`)) {
+            return;
+        }
+    }
+
+    let data = JSON.parse(localStorage.getItem("answers") || "[]");
+
+    data.push({
+        name: currentStudentName, 
+        time: new Date().toLocaleString(),
+        answers: answers,
+        score: score,
+        total: q.length
+    });
+
+    localStorage.setItem("answers", JSON.stringify(data));
+    alert(`Jawaban terkirim! Skor Anda: ${score}/${q.length}`);
+    
+    showSiswa(); 
+}
+
+// =====================================================
+// LOAD ANSWERS + SCORES FOR GURU
+// =====================================================
+function loadAnswers() {
+    const list = document.getElementById("answerList");
+    let a = JSON.parse(localStorage.getItem("answers") || "[]");
+    let q = JSON.parse(localStorage.getItem("questions") || "[]");
+
+    if (a.length === 0) {
+        list.innerHTML = "<p>Belum ada jawaban siswa yang terkumpul.</p>";
+        return;
+    }
+
+    list.innerHTML = a.map((s,i)=>{
+        let answerDetails = s.answers.map((ans, j) => {
+            if (!q[j]) return ''; 
+            const isCorrect = ans === q[j].key;
+            const statusClass = isCorrect ? 'correct' : 'incorrect';
+            const statusText = isCorrect ? 'BENAR' : 'SALAH';
+            
+            return `<p>Soal ${j+1} [Kunci: ${q[j].key}]: Jawaban Siswa: <span class="${statusClass}">${ans} (${statusText})</span></p>`;
+        }).join("");
+
+        return `
+            <div class="question-box">
+                <b>Siswa: ${s.name || `Siswa ${i+1}`}</b><br>
+                Waktu: ${s.time}<br>
+                Skor: <b>${s.score}/${s.total}</b>
+                <div class="answer-detail-box">
+                    ${answerDetails}
+                </div>
+            </div>
+        `;
+    }).join("");
+}
+
+// =====================================================
+// HAPUS SEMUA JAWABAN SISWA
+// =====================================================
+function clearAnswers() {
+    if (confirm("ANDA YAKIN? Tindakan ini akan menghapus SEMUA jawaban siswa dan skor yang tersimpan. Data tidak dapat dikembalikan.")) {
+        localStorage.removeItem("answers");
+        loadAnswers(); 
+        alert("Semua jawaban siswa telah dihapus.");
+    }
+}
+</script>
+
+</body>
+</html>
